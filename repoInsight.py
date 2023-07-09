@@ -5,7 +5,7 @@ import git
 import time
 from git import Repo
 import argparse
-import requests
+import shutil
 
 NUM_CONTRIBUTORS_PRINTED = 6
 
@@ -158,6 +158,28 @@ for repo_name, stats in sorted_repo_activity_stats[:3]:
     print(f'Number of branches: {stats["num_branches"]}')
     print(f'Number of tags: {stats["num_tags"]}')
     print()
+
+print('Contributors with maya mail address')
+print('--------')
+for author, stats in author_stats.items():
+    if (author.endswith('@mayaprotocol.com)')):
+        print('Author:', author)
+        print(f'Number of commits: {stats["num_commits"]:,}'.replace(',', "'"))
+        print(f'Number of lines added: {stats["num_lines_added"]:,}'.replace(',', "'"))
+        print(f'Number of lines deleted: {stats["num_lines_deleted"]:,}'.replace(',', "'"))
+        print()
+
+for commit in repo.iter_commits():
+    print('Commit message:', commit.message)
+    print('Commit date:', commit.committed_date)
+    print('Files modified in this commit:', commit.stats.files)
+
+# Cleanup
+delete = input('Do you want to delete the repository? (y/N) ')
+if delete.lower() == 'y':
+    print('Performing cleanup...')
+    time.sleep(5) # wait 5 seconds so that the previous libraries remove any semaphores.
+    shutil.rmtree(local_path)
 
 if num_empty_commits != 0:
     print(f'Warning, the analysed repositories contain empty commits (nothing added or removed). Total empty commits: {num_empty_commits}')
