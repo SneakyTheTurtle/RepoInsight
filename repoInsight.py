@@ -17,10 +17,35 @@ num_contributors = 0
 num_branches = 0
 num_tags = 0
 
+num_commits_upstream = 0
+
 author_stats = {}
 author_stats_recent = {}
 
 repo_activity_stats = {}
+
+github_pat = os.environ.get('GITHUB_PAT')
+if not github_pat:
+    raise ValueError("Environment variable GITHUB_PAT not set!")
+
+def get_upstream_repo_details(group_url, repo_name):
+    owner = group_url.rstrip('/').split('/')[-1]
+    headers = {
+        'Authorization': f'token {github_pat}'
+    }
+    response = requests.get(f'https://api.github.com/repos/{owner}/{repo_name}', headers=headers)
+    response_data = response.json()
+    # print(f"Getting upstream repo details. Parent: {response_data.get('parent', {})}")
+    return response_data.get('parent', {})
+
+def ensure_repo_cloned(group_url, repo_name):
+    if not os.path.exists(repo_name):
+        print('Repository not cloned yet, doing so now...')
+        subprocess.run(['git', 'clone', group_url + repo_name, repo_name])
+
+def load_all_commit_hashes(local_path):
+    repo = Repo(local_path)
+    return [commit.hexsha for commit in repo.iter_commits()]
 
 parser = argparse.ArgumentParser(description="Collect stats from GitHub repositories.")
 parser.add_argument("--group_url", help="GitHub group URL, e.g. 'https://github.com/SolveCare/'")
@@ -38,18 +63,29 @@ for repo_to_clone in repos_to_clone:
     local_path = repo_to_clone
 
     # Clone the repository
-    if not os.path.exists(local_path):
-        print('Repository not cloned yet, doing so now...')
-        subprocess.run(['git', 'clone', group_url + repo_to_clone, local_path])
+    ensure_repo_cloned(group_url, repo_to_clone)
+
+    # Detect and clone the upstream
+    upstream_commit_hashes = {}
+    upstream_repo_details = get_upstream_repo_details(group_url, repo_to_clone)
+    if bool(upstream_repo_details):
+        upstream_url = upstream_repo_details.get('svn_url', '')
+        print(f"Fork detected from {upstream_repo_details.get('full_name', {})}: {upstream_url}")
+        upstream_base_url, upstream_last_part = upstream_url.rsplit('/', 1)
+        upstream_base_url += '/' # the base URL needs to end with a "/"
+        ensure_repo_cloned(upstream_base_url, upstream_last_part)
+        upstream_commit_hashes = load_all_commit_hashes(upstream_last_part)
+        num_commits_upstream += len(upstream_commit_hashes)
 
     print('Starting collecting stats...')
 
     repo = Repo(local_path)
 
-    num_commits_current = len(list(repo.iter_commits()))
+    unique_repo_commits = [commit for commit in repo.iter_commits() if commit.hexsha not in upstream_commit_hashes]
+    num_commits_current = len(list(unique_repo_commits))
     num_commits += num_commits_current
 
-    contributors = [commit.author for commit in repo.iter_commits()]
+    contributors = [commit.author for commit in unique_repo_commits]
     num_contributors += len(set(contributors))
 
     num_branches += len([ref for ref in repo.refs if isinstance(ref, git.refs.head.Head)])
@@ -63,7 +99,7 @@ for repo_to_clone in repos_to_clone:
 
     print(f'Simple stats done, starting with contributors (this could take some time with big repos; {num_commits_current} commits in this repo)...')
 
-    for commit in repo.iter_commits():
+    for commit in unique_repo_commits:
         author = commit.author.name + ' (' + commit.author.email + ')'
 
         if author not in author_stats:
@@ -96,7 +132,7 @@ for repo_to_clone in repos_to_clone:
 
     print('Contributors loaded, gathering recent usage...')
 
-    for commit in repo.iter_commits():
+    for commit in unique_repo_commits:
         # If the commit is older than the cutoff date, skip it
         if commit.committed_date < CUTOFF_TIME_RECENT:
             continue
@@ -123,10 +159,11 @@ print('-----------')
 print('')
 print('Overview')
 print('--------')
-print('Number of commits:', num_commits)
+print('Number of commits in project:', num_commits)
+print('Number of commits from upstream (forked project):', num_commits_upstream)
 print('Number of contributors:', num_contributors)
-print('Number of branches:', num_branches)
-print('Number of tags:', num_tags)
+print('Number of branches (Upstream not excluded):', num_branches)
+print('Number of tags (Upstream not excluded):', num_tags)
 print('')
 print(f'Top {NUM_CONTRIBUTORS_PRINTED} Contributors (by number of commits)')
 print('--------')

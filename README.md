@@ -8,7 +8,12 @@ The tool requires Python to be installed on your machine. It uses the GitPython 
 pip install gitpython requests
 ```
 
-To use the tool, you need to download the repoInsight.py script to your local machine.
+This script also assumes that you have a GitHub PAT (personal access token) set as a path variable.
+First, get your PAT from the GitHub website.
+Then set that value into a variable "GITHUB_PAT":
+* Windows Command Prompt: ```set GITHUB_PAT=YOUR_PERSONAL_ACCESS_TOKEN```
+* Windows PowerShell: ```$env:GITHUB_PAT="YOUR_PERSONAL_ACCESS_TOKEN"```
+* Linux/Mac: ```export GITHUB_PAT=YOUR_PERSONAL_ACCESS_TOKEN```
 
 ## Usage
 You can run the tool from the command line as follows:
